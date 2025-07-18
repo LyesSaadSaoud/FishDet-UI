@@ -1,1 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YOLO Detection App</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100">
+    <div class="h-screen flex items-center justify-center px-4 py-4">
+        <div class="bg-white rounded shadow-md p-6 w-full max-w-5xl">
+            <div id="previewContainer" class="relative border rounded overflow-hidden w-full h-[600px] flex items-center justify-center bg-white">
+                <img id="previewImage" src="" alt="Uploaded" class="absolute z-10 object-contain w-full h-full">
+                <canvas id="overlayCanvas" class="absolute top-0 left-0 w-full h-full pointer-events-none z-20"></canvas>
+                <div id="loadingOverlay" class="absolute inset-0 bg-white bg-opacity-90 z-30 flex items-center justify-center hidden">
+                    <div class="flex flex-col items-center">
+                        <svg class="animate-spin h-8 w-8 text-blue-600 mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                        </svg>
+                        <span class="text-blue-600 text-sm">Running detection...</span>
+                    </div>
+                </div>
+            </div>
 
+            <div class="mt-4 flex flex-col items-center space-y-4">
+                <select id="modelSelect" class="border px-3 py-2 rounded w-full max-w-xs">
+                    <option value="yolov5n.pt">YOLOv5n</option>
+                    <option value="yolov8n.pt">YOLOv8n</option>
+                    <option value="yolov9c.pt">YOLOv9c</option>
+                    <option value="yolov9e.pt">YOLOv9e</option>
+                    <option value="yolov10n.pt">YOLOv10n</option>
+                    <option value="yolo11n.pt">YOLOv11n</option>
+                    <option value="yolo11x.pt">YOLOv11x</option>
+                    <option value="yolo12n.pt" selected>YOLOv12n</option>
+                    <option value="yolo12x.pt">YOLOv12x</option>
+                </select>
+
+                <div class="flex items-center space-x-2">
+                    <label for="confidenceRange" class="text-sm text-gray-700">Min Confidence:</label>
+                    <input type="range" id="confidenceRange" min="0" max="100" step="1" value="50" class="w-40">
+                    <span id="confidenceValue" class="text-sm">50%</span>
+                </div>
+
+                <div id="dropzone" class="border-2 border-dashed border-gray-400 rounded-md p-4 text-center cursor-pointer w-full max-w-xl">
+                    <p class="text-gray-600">Click or drop an image here</p>
+                    <input type="file" id="fileInput" accept="image/*" class="hidden">
+                </div>
+
+                <button id="detectBtn" class="bg-blue-600 text-white px-4 py-2 rounded disabled:opacity-50" disabled>Detect</button>
+                <a id="downloadBtn" class="text-blue-600 hover:underline hidden">Download Result</a>
+                <div id="noObjectMessage" class="text-red-600 text-sm hidden">No objects detected in the image.</div>
+                <div id="uploadWarning" class="text-red-600 text-sm hidden">Please upload an image before running detection.</div>
+            </div>
+            <p class="text-xs text-gray-500 mt-4 text-center">All rights are reserved &copy; Lyes Saad Saoud 2025.</p>
+        </div>
+    </div>
+
+    <script>
+        const dropzone = document.getElementById('dropzone');
+        const fileInput = document.getElementById('fileInput');
+        const detectBtn = document.getElementById('detectBtn');
+        const previewImage = document.getElementById('previewImage');
+        const overlayCanvas = document.getElementById('overlayCanvas');
+        const downloadBtn = document.getElementById('downloadBtn');
+        const modelSelect = document.getElementById('modelSelect');
+        const confidenceSlider = document.getElementById('confidenceRange');
+        const confidenceValue = document.getElementById('confidenceValue');
+        const loadingOverlay = document.getElementById('loadingOverlay');
+        const noObjectMessage = document.getElementById('noObjectMessage');
+        const uploadWarning = document.getElementById('uploadWarning');
+
+        let selectedFile = null;
+
+        dropzone.addEventListener('click', () => fileInput.click());
+        dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('bg-blue-100'); });
+        dropzone.addEventListener('dragleave', () => dropzone.classList.remove('bg-blue-100'));
+        dropzone.addEventListener('drop', e => {
+            e.preventDefault();
+            dropzone.classList.remove('bg-blue-100');
+            handleFile(e.dataTransfer.files[0]);
+        });
+
+        fileInput.addEventListener('change', () => {
+            if (fileInput.files.length > 0) {
+                handleFile(fileInput.files[0]);
+            }
+        });
+
+        confidenceSlider.addEventListener('input', () => {
+            confidenceValue.textContent = confidenceSlider.value + '%';
+        });
+
+        function handleFile(file) {
+            if (!file.type.startsWith('image/')) return;
+
+            selectedFile = file;
+            detectBtn.disabled = false;
+            noObjectMessage.classList.add('hidden');
+            uploadWarning.classList.add('hidden');
+            downloadBtn.classList.add('hidden');
+
+            const reader = new FileReader();
+            reader.onload = e => previewImage.src = e.target.result;
+            reader.readAsDataURL(file);
+        }
+
+        detectBtn.addEventListener('click', () => {
+            if (!selectedFile) {
+                uploadWarning.classList.remove('hidden');
+                return;
+            }
+
+            overlayCanvas.getContext('2d').clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+            loadingOverlay.classList.remove('hidden');
+
+            const formData = new FormData();
+            formData.append("image", selectedFile);
+            formData.append("model", modelSelect.value);
+            formData.append("confidence", confidenceSlider.value);
+
+            fetch("https://fishdet-m.onrender.com/detect", {
+                method: "POST",
+                body: formData
+            })
+            .then(res => {
+                loadingOverlay.classList.add('hidden');
+                if (res.status === 204) {
+                    noObjectMessage.classList.remove('hidden');
+                    return null;
+                }
+                return res.blob();
+            })
+            .then(blob => {
+                if (!blob) return;
+                const imgURL = URL.createObjectURL(blob);
+                previewImage.onload = () => {
+                    overlayCanvas.width = previewImage.width;
+                    overlayCanvas.height = previewImage.height;
+                    const ctx = overlayCanvas.getContext('2d');
+                    ctx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+                    ctx.drawImage(previewImage, 0, 0, previewImage.width, previewImage.height);
+                };
+                previewImage.src = imgURL;
+                downloadBtn.href = imgURL;
+                downloadBtn.download = 'detected_' + selectedFile.name;
+                downloadBtn.classList.remove('hidden');
+            })
+            .catch(() => {
+                loadingOverlay.classList.add('hidden');
+                alert("Detection failed.");
+            });
+        });
+    </script>
+</body>
+</html>
