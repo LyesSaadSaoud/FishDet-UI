@@ -119,7 +119,7 @@
             formData.append("model", modelSelect.value);
             formData.append("confidence", confidenceSlider.value);
 
-            fetch("/detect", {
+            fetch("https://fishdet-m.onrender.com/detect", {
                 method: "POST",
                 body: formData
             })
